@@ -1,0 +1,21 @@
+# Deploy FRONTEND của qa-hub (dashboard Next.js) — nhánh này KHÔNG chứa backend.
+# Backend (API + MySQL) nằm ở nhánh `backend` của CÙNG repo
+# (github.com/nghiafullstack/qa_hub) — deploy độc lập, tự có docker-compose.yml riêng ở đó.
+# Dashboard này chỉ cần biết URL public của backend đã deploy qua build arg
+# NEXT_PUBLIC_API_BASE_URL (biến NEXT_PUBLIC_* của Next.js chỉ đọc được lúc BUILD image, không
+# đọc lại lúc chạy container — đổi API URL nghĩa là phải build lại image).
+#
+# Chạy: QAHUB_API_PUBLIC_URL=https://qa-hub-api.yourcompany.com docker compose up -d --build
+# (hoặc set biến này trong file .env cùng thư mục)
+
+name: qa-hub-frontend
+
+services:
+  web:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${QAHUB_API_PUBLIC_URL:-http://localhost:9090}
+    restart: unless-stopped
+    ports:
+      - "9091:3000"

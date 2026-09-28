@@ -1,0 +1,15 @@
+# Node / Next.js
+node_modules/
+.next/
+out/
+.env.local
+
+# Leftover local-dev artifacts from the sibling backend checkout, if this branch is ever
+# checked out into the same working copy as the backend branch.
+/api/
+/web/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
