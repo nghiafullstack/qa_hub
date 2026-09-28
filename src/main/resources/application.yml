@@ -1,0 +1,55 @@
+server:
+  port: ${SERVER_PORT:9090}
+
+spring:
+  application:
+    name: qa-hub-api
+
+  datasource:
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3307}/${DB_DATABASE:qa_hub}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${DB_USERNAME:qa_hub}
+    password: ${DB_PASSWORD:qa_hub}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 25MB
+
+qahub:
+  jwt:
+    secret: ${QAHUB_JWT_SECRET:change-me-dev-only-change-me-dev-only}
+    access-token-ttl-minutes: ${QAHUB_JWT_TTL_MINUTES:480}
+  # Dùng CHUNG quy ước biến môi trường với module AI Chatbot bên rencity-platform-spring
+  # (mo-post-service/aff-service .env) — dùng lại đúng key Gemini đã có của dự án đó (sau khi PM
+  # confirm), copy nguyên khối GEMINI_* từ .env bên đó sang là chạy được, không cần đổi tên biến.
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-3.6-flash}
+    base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
+    timeout-ms: ${GEMINI_TIMEOUT_MS:180000}
+    # Dùng đúng biến "ANALYSIS" đã có sẵn bên Rencity — tính năng "Phân tích" của QA Hub cùng
+    # loại tác vụ (đọc nhiều ngữ cảnh, suy luận) nên dùng chung mức thinking/token với use case đó.
+    thinking-level: ${GEMINI_THINKING_LEVEL_ANALYSIS:minimal}
+    max-output-tokens: ${GEMINI_ANALYSIS_MAX_OUTPUT_TOKENS:3072}
+    timeout-retries: ${GEMINI_TIMEOUT_RETRIES:1}
+  github:
+    # Token dung de doc noi dung file qua GitHub Contents API khi dong bo tai lieu tu Git repo.
+    # De trong = chi doc duoc repo public voi rate-limit thap.
+    token: ${QAHUB_GITHUB_TOKEN:}
+
+logging:
+  level:
+    vn.qahub: INFO

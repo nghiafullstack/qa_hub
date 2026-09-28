@@ -1,0 +1,45 @@
+name: qa-hub backend CI/CD
+
+# Nhánh này chỉ chứa backend (api). Frontend có CI riêng ở nhánh `frontend` của cùng repo.
+
+on:
+  push:
+    branches: [backend]
+  pull_request:
+    branches: [backend]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      - name: Build + unit test
+        run: mvn -B -q package
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/backend' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy qua SSH (docker compose up -d --build trên VPS)
+        # Cần cấu hình trước trong Settings > Secrets của repo: DEPLOY_HOST, DEPLOY_USER,
+        # DEPLOY_SSH_KEY, DEPLOY_PATH (thư mục chứa checkout nhánh `backend` trên VPS, đã có
+        # sẵn file .env — xem .env.example). Bỏ qua job này (không set vars.DEPLOY_ENABLED)
+        # nếu chưa muốn deploy tự động — build vẫn chạy bình thường.
+        if: vars.DEPLOY_ENABLED == 'true'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd ${{ secrets.DEPLOY_PATH }}
+            git pull --ff-only
+            docker compose up -d --build

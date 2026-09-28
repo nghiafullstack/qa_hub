@@ -1,0 +1,16 @@
+# Secrets
+.env
+
+# Java / Maven
+target/
+
+# Leftover local-dev artifacts from the sibling frontend checkout, if this branch is ever
+# checked out into the same working copy as the frontend branch.
+/api/
+/web/
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
