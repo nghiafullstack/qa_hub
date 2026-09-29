@@ -4,6 +4,12 @@
 # Java / Maven
 target/
 
+# Node / Playwright (e2e-web/)
+e2e-web/node_modules/
+e2e-web/test-results/
+e2e-web/playwright-report/
+e2e-web/playwright/.cache/
+
 # Leftover local-dev artifacts from the sibling frontend checkout, if this branch is ever
 # checked out into the same working copy as the frontend branch.
 /api/

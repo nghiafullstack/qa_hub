@@ -1,0 +1,114 @@
+# Chạy bộ test API (JUnit 5 + REST-assured) nhắm vào 1 môi trường thật của Rencity.
+# Mặc định: Dev (https://api-dev.renapp.vn) — đổi bằng cách chạy tay và nhập base_url khác,
+# hoặc sửa `env.RENCITY_BASE_URL` bên dưới nếu muốn đổi mặc định lâu dài.
+#
+# File này nằm chung nhánh `backend` (default branch) của repo qa_hub
+# (github.com/nghiafullstack/qa_hub) với chính API của QA Hub — xem RENCITY-TESTS.md ở root cho
+# toàn bộ chi tiết bộ test này (2 project Maven độc lập, chỉ nói chuyện qua HTTP, không chia sẻ
+# code). Vì nằm trên default branch nên `schedule` bên dưới chạy tự động bình thường (GitHub
+# Actions chỉ tự chạy `schedule` theo file nằm trên default branch của repo).
+#
+# Sau khi test xong, kết quả (Surefire XML) được gửi qua HTTP vào chính API QA Hub cùng nhánh này
+# (endpoint /api/v1/ingest/rencity/runs) để lưu lịch sử + chạy phân tích lệch nghiệp vụ. Bước gửi
+# CHỈ chạy khi đã cấu hình secrets QAHUB_API_URL + QAHUB_PROJECT_TOKEN trong Settings > Secrets
+# của repo này — chưa cấu hình thì bước bị bỏ qua, không làm fail job.
+#
+# Trigger: theo lịch (mỗi đêm) + chạy tay (workflow_dispatch).
+
+name: API Tests (BE flows)
+
+on:
+  schedule:
+    # 02:00 giờ VN (UTC+7) = 19:00 UTC hôm trước — chạy lúc traffic thấp, tránh dữ liệu test
+    # tự tạo (tài khoản/hợp đồng QA) lẫn vào giờ cao điểm thật.
+    - cron: "0 19 * * *"
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Base URL muốn test (để trống = Dev mặc định)"
+        type: string
+        default: ""
+
+env:
+  RENCITY_BASE_URL: ${{ inputs.base_url || 'https://api-dev.renapp.vn' }}
+
+jobs:
+  api-tests:
+    name: Chạy API tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cài Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - name: Chạy test (mvn test)
+        working-directory: api-tests
+        run: mvn -B test
+
+      - name: Ghi tóm tắt kết quả vào Summary
+        if: always()
+        working-directory: api-tests
+        run: |
+          {
+            echo "## Kết quả API Tests — nhắm \`$RENCITY_BASE_URL\`"
+            echo ""
+            echo "| File | Tests | Fail | Error | Skip |"
+            echo "|------|-------|------|-------|------|"
+            for f in target/surefire-reports/TEST-*.xml; do
+              [ -f "$f" ] || continue
+              name=$(basename "$f" .xml | sed 's/^TEST-//')
+              tests=$(grep -o 'tests="[0-9]*"' "$f" | head -1 | grep -o '[0-9]*')
+              failures=$(grep -o 'failures="[0-9]*"' "$f" | head -1 | grep -o '[0-9]*')
+              errors=$(grep -o 'errors="[0-9]*"' "$f" | head -1 | grep -o '[0-9]*')
+              skipped=$(grep -o 'skipped="[0-9]*"' "$f" | head -1 | grep -o '[0-9]*')
+              echo "| $name | $tests | $failures | $errors | $skipped |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Lưu báo cáo test làm artifact (xem chi tiết khi fail)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: api-tests/target/surefire-reports/
+          retention-days: 14
+
+      - name: Gửi kết quả vào QA Hub
+        if: always()
+        working-directory: api-tests
+        env:
+          QAHUB_API_URL: ${{ secrets.QAHUB_API_URL }}
+          QAHUB_PROJECT_TOKEN: ${{ secrets.QAHUB_PROJECT_TOKEN }}
+        run: |
+          if [ -z "$QAHUB_API_URL" ] || [ -z "$QAHUB_PROJECT_TOKEN" ]; then
+            echo "Chưa cấu hình QAHUB_API_URL/QAHUB_PROJECT_TOKEN — bỏ qua bước gửi vào QA Hub."
+            exit 0
+          fi
+
+          args=(-sS -o /tmp/qahub_response.json -w "%{http_code}"
+            -H "Authorization: Bearer $QAHUB_PROJECT_TOKEN"
+            --url-query "baseUrlTested=$RENCITY_BASE_URL"
+            --url-query "gitCommitSha=$GITHUB_SHA"
+            --url-query "source=github-actions")
+          for f in target/surefire-reports/TEST-*.xml; do
+            [ -f "$f" ] || continue
+            args+=(-F "report=@$f")
+          done
+
+          http_status=$(curl "${args[@]}" "$QAHUB_API_URL/api/v1/ingest/rencity/runs")
+          echo "QA Hub trả về HTTP $http_status:"
+          cat /tmp/qahub_response.json
+
+          if [ "$http_status" -ge 200 ] && [ "$http_status" -lt 300 ]; then
+            {
+              echo ""
+              echo "Đã gửi kết quả vào QA Hub — xem chi tiết tại \`$QAHUB_API_URL\` (project \`rencity\`)."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::Gửi kết quả vào QA Hub thất bại (HTTP $http_status) — không làm fail job test."
+          fi

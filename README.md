@@ -4,14 +4,16 @@ Nền tảng nội bộ theo dõi lịch sử chạy test **cho nhiều dự án
 dashboard web, và engine phát hiện khi hành vi thực tế (qua kết quả test) khác tài liệu đặc tả
 hoặc khác nhau giữa BE/FE.
 
-**Đây là nhánh `backend`** của repo [qa_hub](https://github.com/nghiafullstack/qa_hub) — chỉ
-chứa API (Spring Boot). Dashboard (Next.js) nằm ở **nhánh `frontend`** của cùng repo này, checkout
-riêng để chạy song song. Hai nhánh không chia sẻ Git history con-trỏ-tới-nhau — mỗi nhánh tự vận
-hành độc lập, chỉ liên hệ với nhau qua HTTP (`NEXT_PUBLIC_API_BASE_URL` bên frontend trỏ vào API
-của nhánh này).
+**Đây là nhánh `backend`** của repo [qa_hub](https://github.com/nghiafullstack/qa_hub) — chứa API
+(Spring Boot) **và** bộ test tự động của Rencity (`api-tests/`, `e2e-web/` — xem
+[RENCITY-TESTS.md](RENCITY-TESTS.md)), gộp chung để quản lý 1 chỗ nhưng vẫn là 2 project Maven độc
+lập, chỉ nói chuyện qua HTTP. Dashboard (Next.js) nằm ở **nhánh `frontend`** của cùng repo này,
+checkout riêng để chạy song song — nhánh đó không chia sẻ Git history với nhánh này, chỉ liên hệ
+qua HTTP (`NEXT_PUBLIC_API_BASE_URL` bên frontend trỏ vào API của nhánh này).
 
 Repo này **hoàn toàn tách biệt** khỏi `rencity-platform-spring` — không dùng chung port, DB, hay
-file docker-compose. Rencity chỉ là **dự án đầu tiên** được đăng ký vào hệ thống.
+file docker-compose. Rencity chỉ là **dự án đầu tiên** được đăng ký vào hệ thống — bộ test của
+Rencity nằm chung nhánh này chỉ vì tiện quản lý, không phải vì QA Hub chỉ phục vụ riêng Rencity.
 
 ## API cung cấp
 
@@ -22,7 +24,7 @@ file docker-compose. Rencity chỉ là **dự án đầu tiên** được đăng
 - `POST /api/v1/ingest/{slug}/runs` — **Bearer = token dự án** (khác JWT đăng nhập), nhận multipart
   field `report` (1 hoặc nhiều file JUnit Surefire XML), tự parse ra test case, lưu `TestRun`.
   Đây là endpoint mà CI của dự án khác gọi sau khi chạy test xong — xem ví dụ tích hợp thật tại
-  `rencity-qa-automation/.github/workflows/api-tests.yml`.
+  `.github/workflows/api-tests.yml` (cùng nhánh này, xem [RENCITY-TESTS.md](RENCITY-TESTS.md)).
 - `GET /api/v1/projects/{slug}/runs`, `GET /api/v1/projects/{slug}/runs/{runId}` — lịch sử/chi tiết run.
 - `POST/GET /api/v1/projects/{slug}/documents` — upload tay, đồng bộ Git (`sync-git`), đăng ký
   OpenAPI URL.
@@ -94,8 +96,9 @@ string MySQL production) nằm trong working tree lúc khảo sát repo để th
 
 ## Trạng thái đã verify vs chưa verify (tính đến 2026-09-28)
 
-**Đã verify thật (chạy sống)**: ingest JUnit XML thật từ `rencity-qa-automation` (cả chạy tay lẫn
-qua GitHub Actions), login JWT, CORS với dashboard, upload tài liệu tay + đăng ký OpenAPI URL,
+**Đã verify thật (chạy sống)**: ingest JUnit XML thật từ bộ test Rencity (`api-tests/`, xem
+[RENCITY-TESTS.md](RENCITY-TESTS.md); cả chạy tay lẫn qua GitHub Actions), login JWT, CORS với
+dashboard, upload tài liệu tay + đăng ký OpenAPI URL,
 `docker build` độc lập cho image này.
 
 **Chưa verify**: gọi Gemini thật (chờ API key), đồng bộ tài liệu từ Git repo private của Rencity
