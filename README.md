@@ -29,17 +29,22 @@ file docker-compose. Rencity chỉ là **dự án đầu tiên** được đăng
 - `POST /api/v1/projects/{slug}/runs/{runId}/analyze`, `GET .../analysis`, `GET .../findings`,
   `PUT /api/v1/findings/{id}/status` — engine phân tích (Gemini) + quản lý finding.
 
+## Database
+
+MySQL chạy trên **server riêng bên ngoài** — repo này không bundle container MySQL (Docker Compose
+chỉ có service `api`). Trước khi chạy, tự tạo:
+- 1 database/schema rỗng (tên khớp `DB_DATABASE`, mặc định `qa_hub`).
+- 1 user có đủ quyền `CREATE`/`ALTER`/`INSERT`/`SELECT`/`UPDATE`/`DELETE` trên schema đó (Flyway
+  cần quyền tạo bảng).
+
+Flyway (`src/main/resources/db/migration/V1__init_schema.sql`) tự tạo 7 bảng khi API khởi động
+lần đầu — không cần chạy SQL tay, chỉ cần schema rỗng + user đã tồn tại sẵn.
+
 ## Chạy local (không cần Docker)
 
 ```bash
-# 1. MySQL riêng cho qa-hub
-docker run -d --name qahub-mysql -p 3307:3306 \
-  -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=qa_hub \
-  -e MYSQL_USER=qa_hub -e MYSQL_PASSWORD=qa_hub mysql:8.0
-
-# 2. API — cần JDK 17
 export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home   # đổi theo máy bạn
-DB_HOST=127.0.0.1 DB_PORT=3307 DB_DATABASE=qa_hub DB_USERNAME=qa_hub DB_PASSWORD=qa_hub \
+DB_HOST=<host mysql của bạn> DB_PORT=3306 DB_DATABASE=qa_hub DB_USERNAME=qa_hub DB_PASSWORD=<mật khẩu> \
 QAHUB_ADMIN_EMAIL=admin@qahub.local QAHUB_ADMIN_PASSWORD=Admin@12345 \
 mvn spring-boot:run
 # → chạy ở :9090, tự seed tài khoản admin đầu tiên từ QAHUB_ADMIN_EMAIL/PASSWORD
@@ -47,21 +52,23 @@ mvn spring-boot:run
 
 Sau đó checkout nhánh `frontend` (thư mục làm việc khác) để chạy dashboard trỏ vào `:9090`.
 
-## Chạy bằng Docker Compose (chỉ backend: api + mysql)
+## Chạy bằng Docker Compose (chỉ backend: api)
 
 ```bash
 cp .env.example .env
-# điền QAHUB_JWT_SECRET, QAHUB_ADMIN_PASSWORD, GEMINI_API_KEY (xem mục bên dưới),
+# điền DB_HOST/DB_PORT/DB_DATABASE/DB_USERNAME/DB_PASSWORD trỏ vào MySQL server ngoài của bạn,
+# QAHUB_JWT_SECRET, QAHUB_ADMIN_PASSWORD, GEMINI_API_KEY (xem mục bên dưới),
 # QAHUB_GITHUB_TOKEN (nếu cần), QAHUB_WEB_ORIGIN (origin thật của dashboard bên nhánh frontend)
 docker compose up -d --build
 ```
 
-api chạy ở `http://localhost:9090`, mysql map ra `localhost:3307` (có thể bỏ map cổng này khi
-deploy VPS thật). Cổng 9090/3307 được chọn vì dải 8180–8186 đã bị `rencity-platform-spring` chiếm
-(host network mode) trên cùng máy/VPS.
+api chạy ở `http://localhost:9090`. Cổng 9090 được chọn vì dải 8180–8186 đã bị
+`rencity-platform-spring` chiếm (host network mode) trên cùng máy/VPS.
 
 **Đã xác nhận** (2026-09-28): `docker build .` (Dockerfile ở root nhánh này) build image thành
 công độc lập (`maven:3.9-eclipse-temurin-17` build stage → `eclipse-temurin:17-jre` runtime).
+**Chưa xác nhận**: chạy image này trỏ vào MySQL server ngoài thật (mới verify với MySQL local qua
+`mvn spring-boot:run`, xem mục "Trạng thái" bên dưới).
 
 ## Dùng lại API key Gemini của Rencity
 
@@ -92,8 +99,8 @@ qua GitHub Actions), login JWT, CORS với dashboard, upload tài liệu tay + �
 `docker build` độc lập cho image này.
 
 **Chưa verify**: gọi Gemini thật (chờ API key), đồng bộ tài liệu từ Git repo private của Rencity
-(chờ `QAHUB_GITHUB_TOKEN`), `docker compose up -d` full stack, job `deploy` trong CI (mặc định tắt,
-chờ VPS/secrets thật).
+(chờ `QAHUB_GITHUB_TOKEN`), chạy API trỏ vào MySQL server ngoài thật (chờ schema được tạo trên
+server đó), job `deploy` trong CI (mặc định tắt, chờ VPS/secrets thật).
 
 **Chưa làm** (đúng phạm vi MVP): SDK tích hợp sâu (capture request/response tự động — engine rule
 so schema OpenAPI vì vậy còn hạn chế), multi-tenant/SaaS, tự động chạy AI sau mỗi run (vẫn theo

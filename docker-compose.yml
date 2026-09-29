@@ -1,52 +1,34 @@
-# Deploy BACKEND của qa-hub (api + mysql riêng của nó) — nhánh này KHÔNG chứa frontend.
+# Deploy BACKEND của qa-hub (chỉ api — KHÔNG bundle MySQL). Nhánh này KHÔNG chứa frontend.
 # Frontend (dashboard Next.js) nằm ở nhánh `frontend` của CÙNG repo
 # (github.com/nghiafullstack/qa_hub) — deploy độc lập, tự có docker-compose.yml riêng ở đó,
 # chỉ cần biết URL public của api chạy từ file compose này.
 #
-# TÁCH BIỆT HOÀN TOÀN khỏi rencity-platform-spring/infra/docker-compose.yml — không dùng chung
-# port/DB/file compose với Rencity. Dải cổng 8180-8186 đã bị Rencity chiếm — dùng 9090 (api) /
-# 3307 (mysql, map ra ngoài để dev/debug, đổi/bỏ map này khi deploy VPS thật nếu không cần).
+# MySQL chạy trên 1 server riêng bên ngoài (không phải container do compose này quản lý) — tự
+# tạo database/schema rỗng (tên khớp DB_DATABASE bên dưới) + user có đủ quyền trước khi chạy
+# `docker compose up`. Flyway (`V1__init_schema.sql`) sẽ tự tạo bảng vào lần khởi động API đầu
+# tiên — không cần chạy SQL tay, chỉ cần schema rỗng đã tồn tại.
 #
-# Chạy: docker compose up -d --build
-# Cấu hình bắt buộc trước: copy .env.example -> .env, điền QAHUB_JWT_SECRET/QAHUB_ADMIN_*/
-# GEMINI_* (dùng lại key Rencity, xem README) / QAHUB_GITHUB_TOKEN (nếu cần) / QAHUB_WEB_ORIGIN
-# (origin thật của dashboard bên nhánh frontend, để CORS cho phép).
+# TÁCH BIỆT HOÀN TOÀN khỏi rencity-platform-spring/infra/docker-compose.yml — không dùng chung
+# port/DB với Rencity. Dải cổng 8180-8186 đã bị Rencity chiếm — dùng 9090 cho api.
+#
+# Chạy: copy .env.example -> .env, điền DB_HOST/DB_PORT trỏ vào MySQL server ngoài của bạn +
+# QAHUB_JWT_SECRET/QAHUB_ADMIN_*/GEMINI_* (dùng lại key Rencity, xem README)/QAHUB_GITHUB_TOKEN
+# (nếu cần)/QAHUB_WEB_ORIGIN, rồi `docker compose up -d --build`.
 
 name: qa-hub-backend
 
 services:
-  mysql:
-    image: mysql:8.0
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
-      MYSQL_DATABASE: ${DB_DATABASE:-qa_hub}
-      MYSQL_USER: ${DB_USERNAME:-qa_hub}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-qa_hub}
-    ports:
-      - "3307:3306"
-    volumes:
-      - qahub_mysql_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root}"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
   api:
     build:
       context: .
     restart: unless-stopped
-    depends_on:
-      mysql:
-        condition: service_healthy
     environment:
       SERVER_PORT: 9090
-      DB_HOST: mysql
-      DB_PORT: 3306
+      DB_HOST: ${DB_HOST:?bắt buộc set trong .env — host MySQL server ngoài của bạn}
+      DB_PORT: ${DB_PORT:-3306}
       DB_DATABASE: ${DB_DATABASE:-qa_hub}
-      DB_USERNAME: ${DB_USERNAME:-qa_hub}
-      DB_PASSWORD: ${DB_PASSWORD:-qa_hub}
+      DB_USERNAME: ${DB_USERNAME:?bắt buộc set trong .env}
+      DB_PASSWORD: ${DB_PASSWORD:?bắt buộc set trong .env}
       QAHUB_JWT_SECRET: ${QAHUB_JWT_SECRET:?bắt buộc set trong .env — không dùng giá trị mặc định lúc deploy thật}
       QAHUB_ADMIN_EMAIL: ${QAHUB_ADMIN_EMAIL:-admin@qahub.local}
       QAHUB_ADMIN_PASSWORD: ${QAHUB_ADMIN_PASSWORD:?bắt buộc set trong .env}
@@ -62,6 +44,3 @@ services:
       GEMINI_TIMEOUT_RETRIES: ${GEMINI_TIMEOUT_RETRIES:-1}
     ports:
       - "9090:9090"
-
-volumes:
-  qahub_mysql_data:
